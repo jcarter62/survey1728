@@ -21,13 +21,17 @@ def login_get(request: Request):
 def login_post(
     request: Request,
     last_name: str = Form(...),
-    member_number: str = Form(...),
+    access_code: str = Form(...),
     db: Session = Depends(get_db),
 ):
+    # Trim inputs (we'll use ilike for case-insensitive comparison)
+    last_name_trim = (last_name or "").strip()
+    access_code_trim = (access_code or "").strip()
+
     member = (
         db.query(Member)
-        .filter(Member.last_name.ilike(last_name.strip()))
-        .filter(Member.member_number == member_number.strip())
+        .filter(Member.last_name.ilike(last_name_trim))
+        .filter(Member.access_code.ilike(access_code_trim))
         .first()
     )
     if not member:

@@ -12,6 +12,16 @@
     th { background: #f5f5f5; text-align: left; }
     h3 { margin-top: 1.3rem; }
     button { padding: 0.4rem 0.8rem; }
+    /* Danger button style for destructive actions */
+    .btn-danger {
+      background-color: #e3342f; /* red/danger */
+      color: #fff;
+      border: 1px solid rgba(0,0,0,0.05);
+      padding: 0.35rem 0.7rem;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .btn-danger:hover { opacity: 0.9; }
   </style>
 </head>
 <body>
@@ -52,14 +62,25 @@
         {% set has_reported = hours > 0 or amount > 0 %}
         <tr>
           <td>{{ m.member_number }}</td>
-          <td>{{ m.first_name }} {{ m.last_name }}</td>
+          <td>
+              {{ m.first_name }} {{ m.last_name }} -
+              {{ m.mobile_phone }} / {{ m.email }}
+          </td>
           <td>{{ '%.1f' % hours }}</td>
           <td>${{ '%.2f' % amount }}</td>
-          <td>{% if has_reported %}Reported{% else %}Not reported yet{% endif %}</td>
+          <td>{% if has_reported %}
+                Reported
+              {% else %}
+                <form method="post" action="/admin/remove_member_record/{{m.member_number}}" style="display:inline">
+                    Not reported yet.&nbsp;&nbsp;
+                    <button type="submit" class="btn-danger">Remove Member</button>
+                </form>
+              {% endif %}</td>
             <td>
                 <form method="post" action="/admin/notify/{{m.member_number}}" style="display:inline">
                     <button type="submit">Notify</button>
-      </form>
+                </form>
+
             </td>
         </tr>
       {% endfor %}

@@ -1,0 +1,53 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Import Members - {{ council_title }}</title>
+</head>
+<body>
+  <h1>Import Members</h1>
+  {% if member %}
+    <p>Signed in as {{ member.first_name }} {{ member.last_name }} ({{ member.member_number }})</p>
+  {% endif %}
+
+  {% if error %}
+    <div style="color: red">{{ error }}</div>
+  {% endif %}
+
+  {% if result %}
+    <div>
+      <p>Imported: {{ result.imported }}</p>
+      <p>Skipped empty rows: {{ result.skipped }}</p>
+      {% if result.errors and result.errors|length > 0 %}
+        <div style="color: red">
+          <h3>Errors</h3>
+          <ul>
+            {% for e in result.errors %}
+              <li>{{ e }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+    </div>
+  {% endif %}
+
+  <form action="/import/membership" method="post" enctype="multipart/form-data">
+    <label for="file">CSV file:</label>
+    <input type="file" id="file" name="file" accept=".csv" required />
+    <button type="submit">Upload and Import</button>
+  </form>
+
+  <br>
+  {% if result %}
+    {% if result.imported > 0 %}
+        <form action="/admin/promote" method="post">
+            Member number to promote to admin: <input type="text" name="member_number" required />
+            <button type="submit">Promote to Admin</button>
+        </form>
+    {% endif %}
+  {% endif %}
+
+  <p><a href="/admin/report">Back to Council Report</a></p>
+</body>
+</html>
+

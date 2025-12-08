@@ -1,8 +1,7 @@
 from datetime import date
 from typing import List, Dict
 
-from dns.reversename import to_address
-from fastapi import APIRouter, Depends, Request, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, Request, HTTPException, BackgroundTasks, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -306,7 +305,8 @@ async def admin_notify_member(member_number: str, request: Request, background_t
         # If not, generate and assign a new one
         from .access_code import AccessCode
         ac = AccessCode(db)
-        access_code = ac.assign_access_code(target_member.id)
+        # ensure we pass a plain int to satisfy the type checker
+        access_code = ac.assign_access_code(int(getattr(target_member, "id")))
 
     target_member_email = target_member.email
     email_template_file_path = os.getenv("EMAIL_TEXT", EMAIL_TEXT)
@@ -341,7 +341,185 @@ async def admin_notify_member(member_number: str, request: Request, background_t
 
     return RedirectResponse("/admin/report", status_code=303)
 
+@router.post('/admin/remove_member_record/{member_number}')
+async def admin_remove_member_record(member_number: str, request: Request, db: Session = Depends(get_db)):
+    member = get_current_member(request, db)
+    require_admin(member)
+    target_member = db.query(Member).filter(Member.member_number == member_number).first()
+    if not target_member:
+        raise HTTPException(status_code=404, detail="Member not found")
+    try:
+        # First delete associated activities
+        db.query(Activity).filter(Activity.member_id == target_member.id).delete()
+        # Then delete the member record
+        db.delete(target_member)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to remove member record: {e}")
+    return RedirectResponse("/admin/report", status_code=303)
+
+@router.get("/import/membership", response_class=HTMLResponse)
+async def import_members_get(request: Request, db: Session = Depends(get_db)):
+    member = get_current_member(request, db)
+#    require_admin(member)
+    return templates.TemplateResponse(
+        "admin/import_members.html",
+        {
+            "request": request,
+            "member": member,
+            "council_title": COUNCIL_TITLE,
+            "error": None,
+            "result": None,
+        },
+    )
+
+
+@router.post("/import/membership", response_class=HTMLResponse)
+async def import_members_post(request: Request, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Upload a CSV, truncate the members table, and import new members.
+
+    Expected CSV headers (at minimum): member_number, first_name, last_name
+    Optional headers: mobile_phone, email, access_code, is_admin
+    """
+    member = get_current_member(request, db)
+
+    if not file.filename.lower().endswith(".csv"):
+        return templates.TemplateResponse(
+            "admin/import_members.html",
+            {
+                "request": request,
+                "member": member,
+                "council_title": COUNCIL_TITLE,
+                "error": "Please upload a .csv file",
+                "result": None,
+            },
+            status_code=400,
+        )
+
+    import io
+    import csv
+
+    content = await file.read()
+    try:
+        text = content.decode("utf-8-sig")
+    except Exception:
+        text = content.decode("utf-8", errors="replace")
+
+    reader = csv.DictReader(io.StringIO(text))
+
+    # Basic validation of required columns
+    required_cols = ["Membership Number", "First Name", "Last Name", "Cell Phone", "Primary Email"]
+    missing_cols = [c for c in required_cols if c not in (reader.fieldnames or [])]
+    if missing_cols:
+        return templates.TemplateResponse(
+            "admin/import_members.html",
+            {
+                "request": request,
+                "member": member,
+                "council_title": COUNCIL_TITLE,
+                "error": f"Missing required columns in CSV: {', '.join(missing_cols)}",
+                "result": None,
+            },
+            status_code=400,
+        )
+
+    # Truncate existing members table
+    try:
+        db.query(Member).delete()
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to truncate members table: {e}")
+
+    imported = 0
+    skipped = 0
+    errors = []
+
+    for i, row in enumerate(reader, start=1):
+        # skip entirely empty rows
+        if not any((v or "").strip() for v in row.values()):
+            skipped += 1
+            continue
+
+        try:
+            m = Member(
+                member_number=(row.get("Membership Number") or "").strip(),
+                first_name=(row.get("First Name") or "").strip(),
+                last_name=(row.get("Last Name") or "").strip(),
+                mobile_phone=(row.get("Cell Phone") or "").strip(),
+                email=(row.get("Primary Email") or "").strip(),
+            )
+
+            # optional fields
+            if "access_code" in (reader.fieldnames or []):
+                try:
+                    if hasattr(m, "access_code"):
+                        m.access_code = (row.get("access_code") or "").strip() or None
+                except Exception:
+                    pass
+
+            if "is_admin" in (reader.fieldnames or []):
+                val = (row.get("is_admin") or "").strip().lower()
+                if val in ("1", "true", "yes", "y"):
+                    try:
+                        if hasattr(m, "is_admin"):
+                            m.is_admin = True
+                    except Exception:
+                        pass
+
+            db.add(m)
+            imported += 1
+        except Exception as e:
+            errors.append(f"Row {i}: {e}")
+
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to commit imported members: {e}")
+
+    # now set the access_codes for those members missing one
+    from .access_code import AccessCode
+    ac = AccessCode(db)
+    members_without_ac = db.query(Member).filter((Member.access_code == None) | (Member.access_code == "")).all()
+    for m in members_without_ac:
+        ac.assign_access_code(int(getattr(m, "id")))
+
+    result = {"imported": imported, "skipped": skipped, "errors": errors}
+
+    return templates.TemplateResponse(
+        "admin/import_members.html",
+        {
+            "request": request,
+            "member": member,
+            "council_title": COUNCIL_TITLE,
+            "error": None,
+            "result": result,
+        },
+    )
+
 
 @router.get("/static/{filename}", response_class=HTMLResponse)
 async def static_files(filename: str, request: Request):
     return FileResponse(f"static/{filename}")
+
+@router.post("/admin/promote")
+async def admin_promote_member(request: Request, member_number: str = Form(...), db: Session = Depends(get_db)):
+
+    member = get_current_member(request, db)
+#    require_admin(member)
+
+    target_member = db.query(Member).filter(Member.member_number == member_number).first()
+    if not target_member:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    try:
+        if hasattr(target_member, "is_admin"):
+            target_member.is_admin = True
+            db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to promote member: {e}")
+
+    return RedirectResponse("/dashboard", status_code=303)
