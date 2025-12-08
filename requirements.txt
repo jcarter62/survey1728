@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+python-dotenv
+jinja2
+sqlalchemy
+aiosqlite
+python-multipart
+email-validator
+itsdangerous
+openpyxl
+pandas
+weasyprint
+slowapi
+pytest
+pytest-asyncio
+pytest-cov
+yagmail

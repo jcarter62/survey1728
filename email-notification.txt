@@ -1,0 +1,22 @@
+Brother {name},
+
+Hope you are doing well.
+As part of the Knights of Columbus Council,
+we are required to send in an annual survey of member activity.
+The supreme office uses the form # 1728 that contains several categories of activities as well as monitary donations.  I believe they use this information to report to many internal and external parties about the good works we do as an organization.
+
+I prepared a form online that you can used to fill out your information, and then I can compile the results and submit them to supreme.  The form is located at the following link:
+https://forms.gle/XYZ123ABC456
+
+Please use your last name as your username, and {access_code} as your password to log in and complete the form.
+
+Please complete the form by the end of the month so we can meet our submission deadline.
+
+If you have any questions or need assistance, feel free to reach out to me directly.
+
+Thank you for your time and dedication to our council and the Knights of Columbus.
+Vivat Jesus,
+James Carter
+Financial Secretary
+Knights of Columbus Council 14241
+559-974-5700

@@ -1,0 +1,347 @@
+from datetime import date
+from typing import List, Dict
+
+from dns.reversename import to_address
+from fastapi import APIRouter, Depends, Request, HTTPException, BackgroundTasks
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.templating import Jinja2Templates
+from sqlalchemy.orm import Session
+
+from .db import get_db
+from .models import Activity, Member
+from .config import COUNCIL_TITLE, EMAIL_TEXT
+
+from .email_sender import EMailSender
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+router = APIRouter()
+templates = Jinja2Templates(directory="templates")
+
+# Detailed Form 1728 Section 1 activities grouped as in prompts.txt
+FAITH_ACTIVITIES: List[str] = [
+    "Refund Support Vocations Program",
+    "Church Facilities",
+    "Catholic Schools/Seminaries",
+    "Religious/Vocations Education",
+    "Prayer & Study Programs",
+    "Sacramental Gifts",
+    "Miscellaneous Faith Activities",
+]
+
+FAMILY_ACTIVITIES: List[str] = [
+    "Food for Families",
+    "Family Formation Programs",
+    "Keep Christ in Christmas",
+    "Family Week",
+    "Family Prayer Night",
+    "Miscellaneous Family Programs",
+]
+
+COMMUNITY_ACTIVITIES: List[str] = [
+    "Coats For Kids",
+    "Global Wheelchair Mission",
+    "Habitat for Humanity",
+    "Disaster Preparedness/Relief",
+    "Physically Disabled/Intellectual Disabilities",
+    "Elderly/Widow(er) Care",
+    "Hospitals/Health Organizations",
+    "Columbian Squires",
+    "Scouting/Youth Groups",
+    "Athletics",
+    "Youth Welfare/Service",
+    "Scholarships/Education",
+    "Veteran Military/VAVS",
+    "Miscellaneous Community/Youth Activities",
+]
+
+LIFE_ACTIVITIES: List[str] = [
+    "Special Olympics",
+    "Marches for Life",
+    "Ultrasound Initiative",
+    "Pregnancy Center Support",
+    "Christian Refugee Relief",
+    "Memorials to Unborn Children",
+    "Miscellaneous Life Activities",
+]
+
+OTHER_QUANTITATIVE: List[str] = [
+    "Visits to the Sick",
+    "Visits to the Bereaved",
+    "Number of Blood Donations",
+    "Masses Held for Members",
+    "Hours of Fraternal Service to Sick/Disabled Members and their Families",
+]
+
+# Items which are quantities (counts) and should NOT be counted as volunteer hours
+QUANTITY_EXCLUDE_HOURS: List[str] = [
+    "Visits to the Sick",
+    "Visits to the Bereaved",
+    "Number of Blood Donations",
+    "Masses Held for Members",
+]
+
+# For simplicity we still store all metrics in the Activity table, using
+# category as the exact label from above. For OTHER_QUANTITATIVE rows we
+# store the quantity in Activity.hours and leave amount at 0.
+
+def get_current_member(request: Request, db: Session) -> Member | None:
+    user_id = request.session.get("user_id")
+    if not user_id:
+        return None
+    return db.query(Member).filter(Member.id == user_id).first()
+
+
+def require_admin(member: Member | None) -> None:
+    if not member or not getattr(member, "is_admin", False):
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+
+@router.get("/dashboard", response_class=HTMLResponse)
+async def dashboard(request: Request, db: Session = Depends(get_db)):
+    member = get_current_member(request, db)
+    if not member:
+        return RedirectResponse("/login", status_code=303)
+
+    activities = db.query(Activity).filter(Activity.member_id == member.id).all()
+    # Exclude quantity-only categories from the total volunteer hours
+    total_hours = sum(a.hours for a in activities if str(a.category) not in QUANTITY_EXCLUDE_HOURS)
+    total_amount = sum(a.amount for a in activities)
+
+    category_totals: Dict[str, Dict[str, float]] = {}
+    for a in activities:
+        cat = str(a.category)
+        category_totals.setdefault(cat, {"hours": 0.0, "amount": 0.0})
+        category_totals[cat]["hours"] += a.hours
+        category_totals[cat]["amount"] += a.amount
+
+    grouped = {
+        "Faith": [(label, category_totals.get(label, {"hours": 0.0, "amount": 0.0})) for label in FAITH_ACTIVITIES],
+        "Family": [(label, category_totals.get(label, {"hours": 0.0, "amount": 0.0})) for label in FAMILY_ACTIVITIES],
+        "Community": [(label, category_totals.get(label, {"hours": 0.0, "amount": 0.0})) for label in COMMUNITY_ACTIVITIES],
+        "Life": [(label, category_totals.get(label, {"hours": 0.0, "amount": 0.0})) for label in LIFE_ACTIVITIES],
+        "Other": [(label, category_totals.get(label, {"hours": 0.0, "amount": 0.0})) for label in OTHER_QUANTITATIVE],
+    }
+
+    return templates.TemplateResponse(
+        "member/dashboard.html",
+        {
+            "request": request,
+            "member": member,
+            "council_title": COUNCIL_TITLE,
+            "total_hours": total_hours,
+            "total_amount": total_amount,
+            "grouped": grouped,
+        },
+    )
+
+
+@router.get("/activities", response_class=HTMLResponse)
+async def activities_get(request: Request, db: Session = Depends(get_db)):
+    member = get_current_member(request, db)
+    if not member:
+        return RedirectResponse("/login", status_code=303)
+
+    activities = db.query(Activity).filter(Activity.member_id == member.id).all()
+    activity_map = {str(a.category): a for a in activities}
+
+    return templates.TemplateResponse(
+        "member/activities.html",
+        {
+            "request": request,
+            "member": member,
+            "faith": FAITH_ACTIVITIES,
+            "family": FAMILY_ACTIVITIES,
+            "community": COMMUNITY_ACTIVITIES,
+            "life": LIFE_ACTIVITIES,
+            "other": OTHER_QUANTITATIVE,
+            "activity_map": activity_map,
+            "today": date.today(),
+            "error": None,
+        },
+    )
+
+
+@router.post("/activities")
+async def activities_post(request: Request, db: Session = Depends(get_db)):
+    member = get_current_member(request, db)
+    if not member:
+        return RedirectResponse(url="/login", status_code=303)
+
+    form = await request.form()
+
+    def upsert(category: str, hours_raw: str, amount_raw: str, quantity_only: bool = False):
+        try:
+            if quantity_only:
+                hours = float(hours_raw or "0")
+                amount = 0.0
+            else:
+                hours = float(hours_raw or "0")
+                amount = float(amount_raw or "0")
+        except ValueError:
+            raise ValueError("invalid")
+        if hours < 0 or amount < 0:
+            raise ValueError("negative")
+
+        existing = (
+            db.query(Activity)
+            .filter(Activity.member_id == member.id, Activity.category == category)
+            .first()
+        )
+        if existing:
+            existing.hours = hours
+            existing.amount = amount
+            existing.date = existing.date or date.today()
+        else:
+            if hours > 0 or amount > 0:
+                db.add(
+                    Activity(
+                        member_id=member.id,
+                        category=category,
+                        description=f"Form 1728 Section 1 - {category}",
+                        date=date.today(),
+                        hours=hours,
+                        amount=amount,
+                    )
+                )
+
+    try:
+        for category in FAITH_ACTIVITIES + FAMILY_ACTIVITIES + COMMUNITY_ACTIVITIES + LIFE_ACTIVITIES:
+            hours_key = f"hours_{category}"
+            amount_key = f"amount_{category}"
+            upsert(category, form.get(hours_key, "0"), form.get(amount_key, "0"), quantity_only=False)
+
+        for category in OTHER_QUANTITATIVE:
+            qty_key = f"qty_{category}"
+            upsert(category, form.get(qty_key, "0"), "0", quantity_only=True)
+
+        db.commit()
+    except ValueError as e:
+        activities = db.query(Activity).filter(Activity.member_id == member.id).all()
+        activity_map = {str(a.category): a for a in activities}
+        msg = "Please enter valid numbers for all fields." if str(e) == "invalid" else "Values must be non-negative."
+        return templates.TemplateResponse(
+            "member/activities.html",
+            {
+                "request": request,
+                "member": member,
+                "faith": FAITH_ACTIVITIES,
+                "family": FAMILY_ACTIVITIES,
+                "community": COMMUNITY_ACTIVITIES,
+                "life": LIFE_ACTIVITIES,
+                "other": OTHER_QUANTITATIVE,
+                "activity_map": activity_map,
+                "today": date.today(),
+                "error": msg,
+            },
+            status_code=400,
+        )
+
+    return RedirectResponse("/dashboard", status_code=303)
+
+
+@router.get("/admin/report", response_class=HTMLResponse)
+async def admin_report(request: Request, db: Session = Depends(get_db)):
+    member = get_current_member(request, db)
+    require_admin(member)
+
+    activities = db.query(Activity).all()
+
+    # Aggregate across all members by category
+    category_totals: Dict[str, Dict[str, float]] = {}
+    for a in activities:
+        cat = str(a.category)
+        category_totals.setdefault(cat, {"hours": 0.0, "amount": 0.0})
+        category_totals[cat]["hours"] += a.hours
+        category_totals[cat]["amount"] += a.amount
+
+    grouped = {
+        "Faith": [(label, category_totals.get(label, {"hours": 0.0, "amount": 0.0})) for label in FAITH_ACTIVITIES],
+        "Family": [(label, category_totals.get(label, {"hours": 0.0, "amount": 0.0})) for label in FAMILY_ACTIVITIES],
+        "Community": [(label, category_totals.get(label, {"hours": 0.0, "amount": 0.0})) for label in COMMUNITY_ACTIVITIES],
+        "Life": [(label, category_totals.get(label, {"hours": 0.0, "amount": 0.0})) for label in LIFE_ACTIVITIES],
+        "Other": [(label, category_totals.get(label, {"hours": 0.0, "amount": 0.0})) for label in OTHER_QUANTITATIVE],
+    }
+
+    # Per-member aggregates
+    members = db.query(Member).order_by(Member.last_name, Member.first_name).all()
+    member_totals: Dict[int, Dict[str, float]] = {int(getattr(m, "id")): {"hours": 0.0, "amount": 0.0} for m in members}
+    for a in activities:
+        mid = int(getattr(a, "member_id"))
+        if mid not in member_totals:
+            # skip activities for members not in list (shouldn't happen)
+            continue
+        # Only add to hours if this category represents hours, not a quantity-only item
+        if str(a.category) not in QUANTITY_EXCLUDE_HOURS:
+            member_totals[mid]["hours"] += a.hours
+        # amounts are always monetary
+        member_totals[mid]["amount"] += a.amount
+
+    return templates.TemplateResponse(
+        "admin/report.html",
+        {
+            "request": request,
+            "member": member,
+            "council_title": COUNCIL_TITLE,
+            "grouped": grouped,
+            "members": members,
+            "member_totals": member_totals,
+        },
+    )
+
+@router.post('/admin/notify/{member_number}')
+async def admin_notify_member(member_number: str, request: Request, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    member = get_current_member(request, db)
+    require_admin(member)
+
+    target_member = db.query(Member).filter(Member.member_number == member_number).first()
+    if not target_member:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    # Determine if target has a valid access_code
+    access_code = target_member.access_code
+    if not access_code or access_code.strip() == "":
+        # If not, generate and assign a new one
+        from .access_code import AccessCode
+        ac = AccessCode(db)
+        access_code = ac.assign_access_code(target_member.id)
+
+    target_member_email = target_member.email
+    email_template_file_path = os.getenv("EMAIL_TEXT", EMAIL_TEXT)
+    # expand ~ and environment variables and resolve to absolute path
+    email_template_file_path = os.path.expanduser(os.path.expandvars(email_template_file_path))
+    if not os.path.isabs(email_template_file_path):
+        email_template_file_path = os.path.abspath(email_template_file_path)
+
+    if not os.path.exists(email_template_file_path):
+        # Provide a clear error to the admin/user instead of crashing the server
+        raise HTTPException(status_code=500, detail=f"Email template not found: {email_template_file_path}")
+
+    # load email-notification template (utf-8)
+    with open(email_template_file_path, "r", encoding="utf-8") as f:
+        email_text = f.read()
+
+    # replace {name} placeholder with member's name
+    email_text = email_text.replace("{name}", f"{target_member.first_name} {target_member.last_name}")
+    email_text = email_text.replace("{access_code}", access_code)
+    es = EMailSender()
+
+    # Schedule synchronous send in background to avoid blocking the request
+    background_tasks.add_task(
+        #     send_email_async(self,to_address: str,
+        #     subject: str = '', body: str = '', html: bool = False):
+        es.send_email,
+        str(target_member_email),
+        f"Notification from {COUNCIL_TITLE}",
+        email_text,
+        False
+    )
+
+    return RedirectResponse("/admin/report", status_code=303)
+
+
+@router.get("/static/{filename}", response_class=HTMLResponse)
+async def static_files(filename: str, request: Request):
+    return FileResponse(f"static/{filename}")

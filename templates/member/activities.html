@@ -1,0 +1,144 @@
+<!doctype html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Form 1728 - Section 1 Activities</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 1.5rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+    th, td { border: 1px solid #ddd; padding: 0.35rem; }
+    th { background: #f5f5f5; text-align: left; }
+    input[type="number"] { width: 100%; box-sizing: border-box; }
+    .error { color: #b00020; margin-top: 0.5rem; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; }
+    .actions { margin-top: 1rem; display: flex; gap: 0.5rem; }
+    button { padding: 0.5rem 0.9rem; }
+    h3 { margin-top: 1.3rem; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h2>Member Activities - Form 1728 Section 1</h2>
+    <div>
+      Logged in as {{ member.first_name }} {{ member.last_name }}
+      <form method="post" action="/logout" style="display:inline">
+        <button type="submit">Logout</button>
+      </form>
+    </div>
+  </div>
+
+  <p>Enter your annual volunteer hours and monetary donations for each applicable activity.</p>
+
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+  <form method="post" action="/activities">
+    <h3>Faith Activities</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Activity</th>
+          <th>Volunteer Hours</th>
+          <th>Monetary Donations ($)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for label in faith %}
+          {% set existing = activity_map.get(label) %}
+          <tr>
+            <td>{{ label }}</td>
+            <td><input type="number" step="0.1" min="0" name="hours_{{ label }}" value="{{ existing.hours if existing else '' }}" /></td>
+            <td><input type="number" step="0.01" min="0" name="amount_{{ label }}" value="{{ existing.amount if existing else '' }}" /></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h3>Family Activities</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Activity</th>
+          <th>Volunteer Hours</th>
+          <th>Monetary Donations ($)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for label in family %}
+          {% set existing = activity_map.get(label) %}
+          <tr>
+            <td>{{ label }}</td>
+            <td><input type="number" step="0.1" min="0" name="hours_{{ label }}" value="{{ existing.hours if existing else '' }}" /></td>
+            <td><input type="number" step="0.01" min="0" name="amount_{{ label }}" value="{{ existing.amount if existing else '' }}" /></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h3>Community Activities</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Activity</th>
+          <th>Volunteer Hours</th>
+          <th>Monetary Donations ($)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for label in community %}
+          {% set existing = activity_map.get(label) %}
+          <tr>
+            <td>{{ label }}</td>
+            <td><input type="number" step="0.1" min="0" name="hours_{{ label }}" value="{{ existing.hours if existing else '' }}" /></td>
+            <td><input type="number" step="0.01" min="0" name="amount_{{ label }}" value="{{ existing.amount if existing else '' }}" /></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h3>Life Activities</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Activity</th>
+          <th>Volunteer Hours</th>
+          <th>Monetary Donations ($)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for label in life %}
+          {% set existing = activity_map.get(label) %}
+          <tr>
+            <td>{{ label }}</td>
+            <td><input type="number" step="0.1" min="0" name="hours_{{ label }}" value="{{ existing.hours if existing else '' }}" /></td>
+            <td><input type="number" step="0.01" min="0" name="amount_{{ label }}" value="{{ existing.amount if existing else '' }}" /></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <h3>Other Fraternal Commitments (Quantities Only)</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Commitment</th>
+          <th>Quantity</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for label in other %}
+          {% set existing = activity_map.get(label) %}
+          <tr>
+            <td>{{ label }}</td>
+            <td><input type="number" step="1" min="0" name="qty_{{ label }}" value="{{ existing.hours if existing else '' }}" /></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div class="actions">
+      <button type="submit">Save and View Dashboard</button>
+      <a href="/dashboard">Cancel</a>
+    </div>
+  </form>
+</body>
+</html>

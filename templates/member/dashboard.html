@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Member Dashboard</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 1.5rem; }
+    .topbar { display: flex; justify-content: space-between; align-items: center; }
+    .nav-links { margin-top: 0.5rem; display: flex; gap: 1rem; }
+    .cards { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; }
+    .card { border: 1px solid #ddd; border-radius: 8px; padding: 0.9rem 1.1rem; min-width: 160px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1.0rem; }
+    th, td { border: 1px solid #ddd; padding: 0.4rem; }
+    th { background: #f5f5f5; text-align: left; }
+    button { padding: 0.4rem 0.8rem; }
+    h3 { margin-top: 1.3rem; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h2>{{ council_title }}</h2>
+      <div class="nav-links">
+        <a href="/activities">Edit my activities</a>
+        {% if member.is_admin %}
+          <a href="/admin/report">Council Report</a>
+        {% endif %}
+        <a href="/static/fraternal_survey1728_p.pdf" target="_blank">KofC 1728 PDF Form</a>
+      </div>
+    </div>
+    <div>
+      Logged in as {{ member.first_name }} {{ member.last_name }}
+      <form method="post" action="/logout" style="display:inline">
+        <button type="submit">Logout</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <strong>Total Volunteer Hours</strong>
+      <div>{{ '%.1f' % total_hours }}</div>
+    </div>
+    <div class="card">
+      <strong>Total Monetary Donations</strong>
+      <div>${{ '%.2f' % total_amount }}</div>
+    </div>
+  </div>
+
+  {% for group_name, rows in grouped.items() %}
+    <h3>{{ group_name }} Activities</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Activity</th>
+          {% if group_name != 'Other' %}
+            <th>Volunteer Hours</th>
+            <th>Donations ($)</th>
+          {% else %}
+            <th>Quantity</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for label, totals in rows %}
+          <tr>
+            <td>{{ label }}</td>
+            {% if group_name != 'Other' %}
+              <td>{{ '%.1f' % totals["hours"] }}</td>
+              <td>${{ '%.2f' % totals["amount"] }}</td>
+            {% else %}
+              <td>{{ '%.1f' % totals["hours"] }}</td>
+            {% endif %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endfor %}
+
+</body>
+</html>
