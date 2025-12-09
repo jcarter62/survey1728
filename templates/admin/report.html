@@ -77,10 +77,10 @@
                 </form>
               {% endif %}</td>
             <td>
-                <form method="post" action="/admin/notify/{{m.member_number}}" style="display:inline">
-                    <button type="submit">Notify</button>
-                </form>
-
+                    <button id="btn{{m.member_number}}" onclick="sendNotification('{{m.member_number}}');"
+                            style="display:inline">
+                        Notify
+                    </button>
             </td>
         </tr>
       {% endfor %}
@@ -117,4 +117,32 @@
     </table>
   {% endfor %}
 </body>
+<script>
+    function sendNotification(memberNumber) {
+        let btnid = 'btn' + memberNumber;
+        let btn = document.getElementById(btnid);
+        btn.disabled = true;
+        btn.innerText = 'Sending...';
+        fetch(`/admin/notify/${memberNumber}`, {
+            method: 'POST'
+        })
+        .then(response => {
+            if (response.ok) {
+                alert('Notification sent successfully.');
+                btn.innerText = 'Notified';
+            } else {
+                alert('Failed to send notification.');
+                btn.disabled = false;
+                btn.innerText = 'Notify - Failed';
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while sending the notification.');
+            btn.disabled = false;
+            btn.innerText = 'Notify - Failed';
+        });
+    }
+</script>
+
 </html>

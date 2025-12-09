@@ -4,7 +4,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.getenv("DB_PATH", os.path.join(os.path.dirname(BASE_DIR), "data.sqlite3"))
+# DB_PATH = os.getenv("DB_PATH", os.path.join(os.path.dirname(BASE_DIR), "data.sqlite3"))
+DB_PATH = os.getenv("DB_PATH", "data.sqlite3")
 SECRET_KEY = os.getenv("SECRET_KEY", "change-me")
 COUNCIL_TITLE = os.getenv("COUNCIL_TITLE", "Knights of Columbus Council")
 SMTP_HOST = os.getenv("SMTP_HOST", "")
