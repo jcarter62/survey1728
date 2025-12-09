@@ -32,6 +32,11 @@
   {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
   <form method="post" action="/activities">
+    <div class="actions">
+      <button type="submit">Save and View Dashboard</button>
+<!--      <a href="/dashboard">Cancel</a>-->
+    </div>
+
     <h3>Faith Activities</h3>
     <table>
       <thead>
@@ -137,8 +142,8 @@
 
     <div class="actions">
       <button type="submit">Save and View Dashboard</button>
-      <a href="/dashboard">Cancel</a>
     </div>
+
   </form>
 </body>
 </html>
