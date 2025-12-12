@@ -3,33 +3,14 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Admin Report - {{ council_title }}</title>
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 1.5rem; }
-    .topbar { display: flex; justify-content: space-between; align-items: center; }
-    .top-links { margin-top: 0.5rem; display: flex; gap: 1rem; }
-    table { width: 100%; border-collapse: collapse; margin-top: 1.0rem; }
-    th, td { border: 1px solid #ddd; padding: 0.4rem; }
-    th { background: #f5f5f5; text-align: left; }
-    h3 { margin-top: 1.3rem; }
-    button { padding: 0.4rem 0.8rem; }
-    /* Danger button style for destructive actions */
-    .btn-danger {
-      background-color: #e3342f; /* red/danger */
-      color: #fff;
-      border: 1px solid rgba(0,0,0,0.05);
-      padding: 0.35rem 0.7rem;
-      cursor: pointer;
-      border-radius: 4px;
-    }
-    .btn-danger:hover { opacity: 0.9; }
-  </style>
+  <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
   <div class="topbar">
     <div>
       <h2>Admin Aggregate Report</h2>
       <div class="top-links">
-        <a href="/dashboard">My Dashboard</a>
+        <a href="/dashboard" class="btn-primary">My Dashboard</a>
       </div>
     </div>
     <div>
@@ -51,7 +32,9 @@
         <th>Total Hours</th>
         <th>Total Donations ($)</th>
         <th>Status</th>
-          <th>Action</th>
+          <th>Action
+          <button class="btn-primary" onclick="sendNotification_to_all();">Notify All</button>
+          </th>
       </tr>
     </thead>
     <tbody>
@@ -72,13 +55,12 @@
                 Reported
               {% else %}
                 <form method="post" action="/admin/remove_member_record/{{m.member_number}}" style="display:inline">
-                    Not reported yet.&nbsp;&nbsp;
-                    <button type="submit" class="btn-danger">Remove Member</button>
+                    No report&nbsp;<button type="submit" class="btn-danger" style="display:inline">X</button>
                 </form>
               {% endif %}</td>
             <td>
                     <button id="btn{{m.member_number}}" onclick="sendNotification('{{m.member_number}}');"
-                            style="display:inline">
+                            style="display:inline" class="btn-primary" >
                         Notify
                     </button>
             </td>
@@ -128,21 +110,31 @@
         })
         .then(response => {
             if (response.ok) {
-                alert('Notification sent successfully.');
                 btn.innerText = 'Notified';
+                btn.classList.remove("btn-primary");
+                btn.classList.add("btn-success");
             } else {
-                alert('Failed to send notification.');
                 btn.disabled = false;
                 btn.innerText = 'Notify - Failed';
             }
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('An error occurred while sending the notification.');
             btn.disabled = false;
             btn.innerText = 'Notify - Failed';
         });
     }
+
+    function sendNotification_to_all() {
+        // for each member number in member_numbers, call sendNotification function for each.
+        for (let i=0; i<member_numbers.length; i++) {
+            console.log('Notifying member number:', member_numbers[i]);
+        }
+    }
+
+    // Build JS array of member numbers that have not reported
+    let member_numbers = {{ not_reported | tojson }};
+
 </script>
 
 </html>

@@ -87,7 +87,9 @@ QUANTITY_EXCLUDE_HOURS: List[str] = [
 # store the quantity in Activity.hours and leave amount at 0.
 
 def get_current_member(request: Request, db: Session) -> Member | None:
-    user_id = request.session.get("user_id")
+    # access the session via request.scope to avoid AssertionError if middleware not installed
+    sess = request.scope.get("session") or {}
+    user_id = sess.get("user_id")
     if not user_id:
         return None
     return db.query(Member).filter(Member.id == user_id).first()
@@ -278,6 +280,15 @@ async def admin_report(request: Request, db: Session = Depends(get_db)):
         # amounts are always monetary
         member_totals[mid]["amount"] += a.amount
 
+    # Build a server-side list of member_numbers for members who have reported
+    member_numbers: List[str] = []
+    for m in members:
+        totals = member_totals.get(int(getattr(m, "id")))
+        hours = totals["hours"] if totals else 0.0
+        amount = totals["amount"] if totals else 0.0
+        if hours <= 0 and amount <= 0:
+            member_numbers.append(m.member_number)
+
     return templates.TemplateResponse(
         "admin/report.html",
         {
@@ -287,6 +298,7 @@ async def admin_report(request: Request, db: Session = Depends(get_db)):
             "grouped": grouped,
             "members": members,
             "member_totals": member_totals,
+            "not_reported": member_numbers,
         },
     )
 

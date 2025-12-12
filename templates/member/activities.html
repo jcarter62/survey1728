@@ -3,22 +3,11 @@
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Form 1728 - Section 1 Activities</title>
-  <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 1.5rem; }
-    table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
-    th, td { border: 1px solid #ddd; padding: 0.35rem; }
-    th { background: #f5f5f5; text-align: left; }
-    input[type="number"] { width: 100%; box-sizing: border-box; }
-    .error { color: #b00020; margin-top: 0.5rem; }
-    .topbar { display: flex; justify-content: space-between; align-items: center; }
-    .actions { margin-top: 1rem; display: flex; gap: 0.5rem; }
-    button { padding: 0.5rem 0.9rem; }
-    h3 { margin-top: 1.3rem; }
-  </style>
+  <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
   <div class="topbar">
-    <h2>Member Activities - Form 1728 Section 1</h2>
+    <h2>Member Activities - Form 1728</h2>
     <div>
       Logged in as {{ member.first_name }} {{ member.last_name }}
       <form method="post" action="/logout" style="display:inline">
@@ -33,7 +22,7 @@
 
   <form method="post" action="/activities">
     <div class="actions">
-      <button type="submit">Save and View Dashboard</button>
+      <button type="submit" class="btn-save">Save and View Dashboard</button>
 <!--      <a href="/dashboard">Cancel</a>-->
     </div>
 
@@ -141,7 +130,7 @@
     </table>
 
     <div class="actions">
-      <button type="submit">Save and View Dashboard</button>
+      <button type="submit" class="btn-save">Save and View Dashboard</button>
     </div>
 
   </form>

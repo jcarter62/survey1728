@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, Request, Form
-from fastapi.responses import RedirectResponse
+from fastapi import APIRouter, Depends, Request, Form, HTTPException
+from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from .db import get_db
 from .models import Member
 from .config import COUNCIL_TITLE
+import json
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -40,10 +41,46 @@ def login_post(
             {"request": request, "error": "Invalid credentials"},
             status_code=400,
         )
-    request.session["user_id"] = member.id
-    return RedirectResponse(url="/dashboard", status_code=303)
+
+    # Access the underlying session mapping safely
+    sess = request.scope.get("session")
+    if sess is None:
+        # SessionMiddleware not installed or session not available
+        raise HTTPException(status_code=500, detail="SessionMiddleware not installed; cannot set session")
+
+    # store user id and name in the session so middleware/logging can pick it up
+    sess["user_id"] = member.id
+    sess["first_name"] = member.first_name or ""
+    sess["last_name"] = member.last_name or ""
+    # store name also in the session for server-side convenience
+    FullName = f"{member.first_name or ''} {member.last_name or ''}".strip()
+    sess["full_name"] = FullName
+
+    # Return HTML that sets localStorage.full_name and localStorage.member_id then navigates to /dashboard
+    # Use json.dumps to safely escape the values for embedding in JS
+    js_fullname = json.dumps(FullName)
+    js_member_id = json.dumps(member.member_number or "")
+    html = (
+        "<!doctype html><html><head><meta charset=\"utf-8\"></head><body>"
+        f"<script>try{{localStorage.setItem('full_name',{js_fullname});localStorage.setItem('member_id',{js_member_id});}}catch(e){{console.warn('localStorage not available',e);}}"
+        "window.location.replace('/dashboard');</script>"
+        "</body></html>"
+    )
+    return HTMLResponse(content=html, status_code=200)
 
 @router.post("/logout")
 def logout(request: Request):
-    request.session.clear()
-    return RedirectResponse(url="/login", status_code=303)
+    # Clear server-side session if present
+    sess = request.scope.get("session")
+    if sess is not None:
+        sess.clear()
+
+    # Return HTML that clears localStorage keys in the browser then redirects to /login
+    html = (
+        "<!doctype html><html><head><meta charset=\"utf-8\"></head><body>"
+        "<script>try{localStorage.removeItem('full_name');localStorage.removeItem('member_id');}catch(e){console.warn('localStorage not available',e);}"
+        "window.location.replace('/login');</script>"
+        "</body></html>"
+    )
+
+    return HTMLResponse(content=html, status_code=200)
