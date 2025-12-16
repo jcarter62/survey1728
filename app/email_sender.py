@@ -16,6 +16,7 @@ class EMailSender:
         self.smtp_user = os.getenv("SMTP_USER")
         self.smtp_pass = os.getenv("SMTP_PASS")
         self.default_from = os.getenv("SMTP_FROM", self.smtp_user)
+        self.email_subject = os.getenv('EMAIL_SUBJECT', 'Default Subject')
 
     def __del__(self):
         self.smtp_host = None
@@ -23,14 +24,17 @@ class EMailSender:
         self.smtp_user = None
         self.smtp_pass = None
         self.default_from = None
+        self.email_subject = None
 
-    def send_email(self,to_address: str, subject: str = '', body: str = '', html: bool = False):
+    def send_email(self,to_address: str, subject: str = None, body: str = '', html: bool = False):
         try:
             user = self.smtp_user
             password = self.smtp_pass
 
             yag = yagmail.SMTP(user=user, password=password)
             contents = body if not html else yagmail.inline(body)
+            if subject is None:
+                subject = self.email_subject
             yag.send(to=to_address, subject=subject, contents=contents)
             yag.close()
             logger.exception("send to: %s", to_address)

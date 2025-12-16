@@ -33,7 +33,7 @@
         <th>Total Donations ($)</th>
         <th>Status</th>
           <th>Action
-<!--          <button class="btn-primary" onclick="sendNotification_to_all();" disabled="True" >Notify All</button>-->
+          <button class="btn-primary hidden" onclick="sendNotification_to_all();">Notify All</button>
           </th>
       </tr>
     </thead>
@@ -59,6 +59,10 @@
                 </form>
               {% endif %}</td>
             <td>
+                {% if has_reported %}
+                {% else %}
+                <data class="member-data hidden" id="id{{ m.member_number }}">{{ m.member_number }}</data>
+                {% endif %}
                     <button id="btn{{m.member_number}}" onclick="sendNotification('{{m.member_number}}');"
                             style="display:inline" class="btn-primary" >
                         Notify
@@ -126,15 +130,12 @@
     }
 
     function sendNotification_to_all() {
-        // for each member number in member_numbers, call sendNotification function for each.
-        for (let i=0; i<member_numbers.length; i++) {
-            console.log('Notifying member number:', member_numbers[i]);
+        let items = document.getElementsByClassName('member-data');
+        for ( let i=0; i<items.length; i++) {
+            let member_number = items[i].innerText;
+            console.log('Sending notification to member number:', member_number);
         }
     }
-
-    // Build JS array of member numbers that have not reported
-    let member_numbers = {{ not_reported | tojson }};
-
 </script>
 
 </html>

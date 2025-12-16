@@ -194,7 +194,7 @@ async def activities_post(request: Request, db: Session = Depends(get_db)):
         if existing:
             existing.hours = hours
             existing.amount = amount
-            existing.date = existing.date or date.today()
+            existing.date = date.today()
         else:
             if hours > 0 or amount > 0:
                 db.add(
@@ -337,21 +337,24 @@ async def admin_notify_member(member_number: str, request: Request, background_t
 
     # replace {name} placeholder with member's name
     email_text = email_text.replace("{name}", f"{target_member.first_name} {target_member.last_name}")
+    email_text = email_text.replace('{last_name}', target_member.last_name or "")
+    email_text = email_text.replace('{url}', os.getenv('URL', 'http://localhost:8000'))
     email_text = email_text.replace("{access_code}", access_code)
-    es = EMailSender()
 
+    # load email subject from environment or use default
+    email_subject = os.getenv('EMAIL_SUBJECT', f"Notification from {COUNCIL_TITLE}")
+
+    es = EMailSender()
     # Schedule synchronous send in background to avoid blocking the request
+    # es.send_email(str(target_member_email), email_subject, email_text, False)
     background_tasks.add_task(
-        #     send_email_async(self,to_address: str,
-        #     subject: str = '', body: str = '', html: bool = False):
         es.send_email,
         str(target_member_email),
-        f"Notification from {COUNCIL_TITLE}",
+        email_subject,
         email_text,
         False
     )
-
-    return RedirectResponse("/admin/report", status_code=303)
+    return { "status": "ok" }
 
 @router.post('/admin/remove_member_record/{member_number}')
 async def admin_remove_member_record(member_number: str, request: Request, db: Session = Depends(get_db)):

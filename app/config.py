@@ -14,5 +14,6 @@ SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASS = os.getenv("SMTP_PASS", "")
 SMTP_FROM = os.getenv("SMTP_FROM", "noreply@example.com")
 EMAIL_TEXT = os.getenv('EMAIL_TEXT', 'This is a default email text.')
+EMAIL_SUBJECT = os.getenv('EMAIL_SUBJECT', 'Default Subject')
 #
 DEBUG = os.getenv("DEBUG", "false").lower() == "true"
