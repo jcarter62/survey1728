@@ -11,6 +11,8 @@
       <h2>Admin Aggregate Report</h2>
       <div class="top-links">
         <a href="/dashboard" class="btn-primary">My Dashboard</a>
+        <button class="btn-primary" onclick="show_only_reported();" >Show Reported Only</button>
+        <button class="btn-primary" onclick="show_all_members();" >Show All</button>
       </div>
     </div>
     <div>
@@ -43,7 +45,8 @@
         {% set hours = totals["hours"] if totals else 0.0 %}
         {% set amount = totals["amount"] if totals else 0.0 %}
         {% set has_reported = hours > 0 or amount > 0 %}
-        <tr>
+        <!-- Put member data on the TR element as data- attributes (unique per row) -->
+        <tr id="mnum-{{ m.member_number }}" data-member-number="{{ m.member_number }}" data-reported="{{ 'true' if has_reported else 'false' }}">
           <td>{{ m.member_number }}</td>
           <td>
               {{ m.first_name }} {{ m.last_name }} -
@@ -61,7 +64,7 @@
             <td>
                 {% if has_reported %}
                 {% else %}
-                <data class="member-data hidden" id="id{{ m.member_number }}">{{ m.member_number }}</data>
+                <!-- removed <data> element; data is on the row now -->
                 {% endif %}
                     <button id="btn{{m.member_number}}" onclick="sendNotification('{{m.member_number}}');"
                             style="display:inline" class="btn-primary" >
@@ -107,6 +110,10 @@
     function sendNotification(memberNumber) {
         let btnid = 'btn' + memberNumber;
         let btn = document.getElementById(btnid);
+        if (!btn) {
+            console.error('Button not found for memberNumber', memberNumber);
+            return;
+        }
         btn.disabled = true;
         btn.innerText = 'Sending...';
         fetch(`/admin/notify/${memberNumber}`, {
@@ -130,12 +137,43 @@
     }
 
     function sendNotification_to_all() {
-        let items = document.getElementsByClassName('member-data');
-        for ( let i=0; i<items.length; i++) {
-            let member_number = items[i].innerText;
+        // iterate rows that have data-reported="false" (unreported)
+        let rows = document.querySelectorAll('tr[data-reported="false"]');
+        if (!rows || rows.length === 0) {
+            console.log('No unreported member rows found to notify.');
+            return;
+        }
+        for (let i = 0; i < rows.length; i++) {
+            let member_number = rows[i].dataset ? rows[i].dataset.memberNumber : rows[i].getAttribute('data-member-number');
             console.log('Sending notification to member number:', member_number);
+            // call sendNotification to perform the actual request and update UI
+            sendNotification(member_number);
         }
     }
+
+    function show_only_reported() {
+        let rows = document.getElementsByTagName('tr');
+        for ( let i=1; i<rows.length; i++) {
+            // read data-reported attribute from the row; using dataset is safer and avoids duplicate IDs
+            let hasReported = rows[i].dataset ? rows[i].dataset.reported : rows[i].getAttribute('data-reported');
+            if (typeof hasReported !== 'undefined' && hasReported !== null) {
+                let has_reported = (hasReported.toLowerCase() === 'true');
+                if (!has_reported) {
+                    rows[i].style.display = 'none';
+                } else {
+                    rows[i].style.display = '';
+                }
+            }
+        }
+    }
+
+    function show_all_members() {
+        let rows = document.getElementsByTagName('tr');
+        for ( let i=1; i<rows.length; i++) {
+            rows[i].style.display = '';
+        }
+    }
+
 </script>
 
 </html>
