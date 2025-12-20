@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Request, Form, HTTPException
-from fastapi.responses import RedirectResponse, HTMLResponse
+from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from .db import get_db
@@ -56,14 +56,14 @@ def login_post(
     FullName = f"{member.first_name or ''} {member.last_name or ''}".strip()
     sess["full_name"] = FullName
 
-    # Return HTML that sets localStorage.full_name and localStorage.member_id then navigates to /dashboard
+    # Return HTML that sets localStorage.full_name and localStorage.member_id then navigates to /activities
     # Use json.dumps to safely escape the values for embedding in JS
     js_fullname = json.dumps(FullName)
     js_member_id = json.dumps(member.member_number or "")
     html = (
         "<!doctype html><html><head><meta charset=\"utf-8\"></head><body>"
         f"<script>try{{localStorage.setItem('full_name',{js_fullname});localStorage.setItem('member_id',{js_member_id});}}catch(e){{console.warn('localStorage not available',e);}}"
-        "window.location.replace('/dashboard');</script>"
+        "window.location.replace('/activities');</script>"
         "</body></html>"
     )
     return HTMLResponse(content=html, status_code=200)

@@ -1,10 +1,12 @@
-from datetime import date
+from datetime import date, datetime
 from typing import List, Dict
 
 from fastapi import APIRouter, Depends, Request, HTTPException, BackgroundTasks, UploadFile, File, Form
-from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, FileResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
+
+import logging
 
 from .db import get_db
 from .models import Activity, Member
@@ -15,6 +17,8 @@ from dotenv import load_dotenv
 import os
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
@@ -287,7 +291,7 @@ async def admin_report(request: Request, db: Session = Depends(get_db)):
         hours = totals["hours"] if totals else 0.0
         amount = totals["amount"] if totals else 0.0
         if hours <= 0 and amount <= 0:
-            member_numbers.append(m.member_number)
+            member_numbers.append(str(getattr(m, "member_number")))
 
     return templates.TemplateResponse(
         "admin/report.html",
@@ -538,3 +542,112 @@ async def admin_promote_member(request: Request, member_number: str = Form(...),
         raise HTTPException(status_code=500, detail=f"Failed to promote member: {e}")
 
     return RedirectResponse("/dashboard", status_code=303)
+
+@router.post('/api/activity-update')
+async def api_activity_update(request: Request, db: Session = Depends(get_db)):
+    """Receive JSON updates for a single activity and upsert into the Activity table for the current member.
+
+    Expected JSON shape:
+    {
+        "category": "Activity Label",
+        "hours": 1.5,           # optional, defaults to 0
+        "amount": 10.0,         # optional, defaults to 0
+        "quantity_only": false  # optional, true if this is a quantity-only field
+    }
+    """
+    member = get_current_member(request, db)
+    if not member:
+        return JSONResponse({"error": "not_authenticated"}, status_code=401)
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"error": "invalid_json"}, status_code=400)
+
+    category = payload.get("category")
+    if not category:
+        return JSONResponse({"error": "missing_category"}, status_code=400)
+
+    quantity_only = bool(payload.get("quantity_only", False))
+
+    # parse numeric inputs defensively
+    def to_float(v):
+        try:
+            if v is None or v == "":
+                return 0.0
+            return float(v)
+        except Exception:
+            raise ValueError("invalid_number")
+
+    try:
+        if quantity_only:
+            hours = to_float(payload.get("hours", 0))
+            amount = 0.0
+        else:
+            hours = to_float(payload.get("hours", 0))
+            amount = to_float(payload.get("amount", 0))
+    except ValueError:
+        return JSONResponse({"error": "invalid_number"}, status_code=400)
+
+    if hours < 0 or amount < 0:
+        return JSONResponse({"error": "negative_value"}, status_code=400)
+
+    existing = (
+        db.query(Activity)
+        .filter(Activity.member_id == member.id, Activity.category == category)
+        .first()
+    )
+
+    try:
+        if existing:
+            existing.hours = hours
+            existing.amount = amount
+            existing.date = date.today()
+        else:
+            # Only create a new row if there's something to store (keep DB cleaner)
+            if hours > 0 or amount > 0 or quantity_only:
+                db.add(
+                    Activity(
+                        member_id=member.id,
+                        category=category,
+                        description=f"Form 1728 Section 1 - {category}",
+                        date=date.today(),
+                        hours=hours,
+                        amount=amount,
+                    )
+                )
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        return JSONResponse({"error": "db_error", "detail": str(e)}, status_code=500)
+
+    # Determine client IP (respect CF and X-Forwarded-For headers)
+    client_ip = request.headers.get("CF-Connecting-IP") or request.headers.get("X-Forwarded-For")
+    if client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    else:
+        client = getattr(request, 'client', None)
+        client_ip = client.host if client else 'unknown'
+
+    # Log autosave details
+    try:
+        logger.info(
+            "autosave: member_id=%s member=%s %s category=%r hours=%s amount=%s qty_only=%s ip=%s",
+            getattr(member, 'id', 'unknown'),
+            getattr(member, 'first_name', ''),
+            getattr(member, 'last_name', ''),
+            category,
+            hours,
+            amount,
+            quantity_only,
+            client_ip,
+        )
+    except Exception:
+        # ensure logging never breaks the response
+        logger.exception("Failed to log autosave")
+
+    # use timezone-aware UTC timestamp
+    from datetime import timezone
+    saved_at = datetime.now(timezone.utc).isoformat()
+
+    return JSONResponse({"status": "ok", "saved_at": saved_at})

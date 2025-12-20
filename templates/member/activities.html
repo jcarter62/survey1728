@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Form 1728 - Section 1 Activities</title>
@@ -23,7 +23,6 @@
   <form method="post" action="/activities">
     <div class="actions">
       <button type="submit" class="btn-save">Save and View Dashboard</button>
-<!--      <a href="/dashboard">Cancel</a>-->
     </div>
 
     <h3>Faith Activities</h3>
@@ -40,8 +39,13 @@
           {% set existing = activity_map.get(label) %}
           <tr>
             <td>{{ label }}</td>
-            <td><input type="number" step="0.1" min="0" name="hours_{{ label }}" value="{{ existing.hours if existing else '' }}" /></td>
-            <td><input type="number" step="0.01" min="0" name="amount_{{ label }}" value="{{ existing.amount if existing else '' }}" /></td>
+            <td>
+              <input type="number" step="0.1" min="0" name="hours_{{ label }}" aria-label="{{ label }} hours" data-category="{{ label }}" data-quantity="false" value="{{ existing.hours if existing else '' }}" />
+              <span class="save-status" data-category="{{ label }}"></span>
+            </td>
+            <td>
+              <input type="number" step="0.01" min="0" name="amount_{{ label }}" aria-label="{{ label }} amount" data-category="{{ label }}" data-quantity="false" value="{{ existing.amount if existing else '' }}" />
+            </td>
           </tr>
         {% endfor %}
       </tbody>
@@ -61,8 +65,13 @@
           {% set existing = activity_map.get(label) %}
           <tr>
             <td>{{ label }}</td>
-            <td><input type="number" step="0.1" min="0" name="hours_{{ label }}" value="{{ existing.hours if existing else '' }}" /></td>
-            <td><input type="number" step="0.01" min="0" name="amount_{{ label }}" value="{{ existing.amount if existing else '' }}" /></td>
+            <td>
+              <input type="number" step="0.1" min="0" name="hours_{{ label }}" aria-label="{{ label }} hours" data-category="{{ label }}" data-quantity="false" value="{{ existing.hours if existing else '' }}" />
+              <span class="save-status" data-category="{{ label }}"></span>
+            </td>
+            <td>
+              <input type="number" step="0.01" min="0" name="amount_{{ label }}" aria-label="{{ label }} amount" data-category="{{ label }}" data-quantity="false" value="{{ existing.amount if existing else '' }}" />
+            </td>
           </tr>
         {% endfor %}
       </tbody>
@@ -82,8 +91,13 @@
           {% set existing = activity_map.get(label) %}
           <tr>
             <td>{{ label }}</td>
-            <td><input type="number" step="0.1" min="0" name="hours_{{ label }}" value="{{ existing.hours if existing else '' }}" /></td>
-            <td><input type="number" step="0.01" min="0" name="amount_{{ label }}" value="{{ existing.amount if existing else '' }}" /></td>
+            <td>
+              <input type="number" step="0.1" min="0" name="hours_{{ label }}" aria-label="{{ label }} hours" data-category="{{ label }}" data-quantity="false" value="{{ existing.hours if existing else '' }}" />
+              <span class="save-status" data-category="{{ label }}"></span>
+            </td>
+            <td>
+              <input type="number" step="0.01" min="0" name="amount_{{ label }}" aria-label="{{ label }} amount" data-category="{{ label }}" data-quantity="false" value="{{ existing.amount if existing else '' }}" />
+            </td>
           </tr>
         {% endfor %}
       </tbody>
@@ -103,8 +117,13 @@
           {% set existing = activity_map.get(label) %}
           <tr>
             <td>{{ label }}</td>
-            <td><input type="number" step="0.1" min="0" name="hours_{{ label }}" value="{{ existing.hours if existing else '' }}" /></td>
-            <td><input type="number" step="0.01" min="0" name="amount_{{ label }}" value="{{ existing.amount if existing else '' }}" /></td>
+            <td>
+              <input type="number" step="0.1" min="0" name="hours_{{ label }}" aria-label="{{ label }} hours" data-category="{{ label }}" data-quantity="false" value="{{ existing.hours if existing else '' }}" />
+              <span class="save-status" data-category="{{ label }}"></span>
+            </td>
+            <td>
+              <input type="number" step="0.01" min="0" name="amount_{{ label }}" aria-label="{{ label }} amount" data-category="{{ label }}" data-quantity="false" value="{{ existing.amount if existing else '' }}" />
+            </td>
           </tr>
         {% endfor %}
       </tbody>
@@ -123,7 +142,10 @@
           {% set existing = activity_map.get(label) %}
           <tr>
             <td>{{ label }}</td>
-            <td><input type="number" step="1" min="0" name="qty_{{ label }}" value="{{ existing.hours if existing else '' }}" /></td>
+            <td>
+              <input type="number" step="1" min="0" name="qty_{{ label }}" aria-label="{{ label }} quantity" data-category="{{ label }}" data-quantity="true" value="{{ existing.hours if existing else '' }}" />
+              <span class="save-status" data-category="{{ label }}"></span>
+            </td>
           </tr>
         {% endfor %}
       </tbody>
@@ -134,5 +156,105 @@
     </div>
 
   </form>
+
+<script>
+// Simple debounce utility
+function debounce(fn, delay) {
+  let t;
+  return function(...args) {
+    clearTimeout(t);
+    t = setTimeout(() => fn.apply(this, args), delay);
+  }
+}
+
+function findStatusEl(category) {
+  const els = document.querySelectorAll('.save-status');
+  for (let i = 0; i < els.length; i++) {
+    if (els[i].getAttribute('data-category') === category) return els[i];
+  }
+  return null;
+}
+
+async function saveField(category, hours, amount, quantity_only) {
+  const statusEl = findStatusEl(category);
+  try {
+    if (statusEl) {
+      statusEl.textContent = 'Saving...';
+      statusEl.classList.remove('save-success', 'save-failed');
+      statusEl.classList.add('save-saving');
+    }
+    const payload = { category, hours, amount, quantity_only };
+    const resp = await fetch('/api/activity-update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      const txt = await resp.text();
+      console.error('Save failed for', category, txt);
+      if (statusEl) {
+        statusEl.textContent = 'Failed';
+        statusEl.classList.remove('save-saving');
+        statusEl.classList.add('save-failed');
+      }
+      return;
+    }
+    const data = await resp.json().catch(() => ({}));
+    const savedAt = data.saved_at ? new Date(data.saved_at).toLocaleTimeString() : null;
+    if (statusEl) {
+      statusEl.textContent = savedAt ? `Saved ${savedAt}` : 'Saved';
+      statusEl.classList.remove('save-saving');
+      statusEl.classList.add('save-success');
+      // clear the message after a few seconds to reduce clutter
+      setTimeout(() => {
+        try { statusEl.textContent = ''; statusEl.classList.remove('save-success'); } catch(e){}
+      }, 4000);
+    }
+  } catch (e) {
+    console.error('Save error', e);
+    if (statusEl) {
+      statusEl.textContent = 'Failed';
+      statusEl.classList.remove('save-saving');
+      statusEl.classList.add('save-failed');
+    }
+  }
+}
+
+const debouncedSave = debounce((category, hours, amount, quantity_only) => {
+  saveField(category, hours, amount, quantity_only);
+}, 1000);
+
+// Attach change/input listeners to all inputs
+document.querySelectorAll('input[data-category]').forEach((el) => {
+  const category = el.getAttribute('data-category');
+  const quantityOnly = el.getAttribute('data-quantity') === 'true';
+
+  function handleChange() {
+    // find paired inputs for same category
+    let hours;
+    let amount;
+    if (quantityOnly) {
+      hours = parseFloat(el.value || 0);
+      amount = 0;
+    } else {
+      // find the hours and amount inputs with same data-category
+      // locate inputs by scanning name-prefixed inputs and matching their data-category
+      const hoursCandidates = document.querySelectorAll('input[name^="hours_"]');
+      const amountCandidates = document.querySelectorAll('input[name^="amount_"]');
+      const hoursInput = Array.from(hoursCandidates).find(i => i.getAttribute('data-category') === category);
+      const amountInput = Array.from(amountCandidates).find(i => i.getAttribute('data-category') === category);
+      hours = hoursInput ? parseFloat(hoursInput.value || 0) : 0;
+      amount = amountInput ? parseFloat(amountInput.value || 0) : 0;
+    }
+    // Use debounced save to avoid flooding
+    debouncedSave(category, hours || 0, amount || 0, quantityOnly);
+  }
+
+  // use input event so autosave happens as user types; for numeric input it's fine
+  el.addEventListener('input', handleChange);
+  // also listen for blur to trigger immediate save
+  el.addEventListener('blur', () => handleChange());
+});
+</script>
 </body>
 </html>

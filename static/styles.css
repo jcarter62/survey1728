@@ -83,3 +83,9 @@ h3 { margin-top: 1.3rem; }
 .hidden {
     display: none;
 }
+
+/* Save status indicators used on activities page */
+.save-status { margin-left: 0.5rem; font-size: 0.85rem; color: #444; }
+.save-saving { color: #1d4ed8; font-weight: 600; }
+.save-success { color: #16a34a; font-weight: 600; }
+.save-failed { color: #dc2626; font-weight: 700; }
