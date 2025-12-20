@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Member Dashboard</title>
@@ -13,6 +13,7 @@
         <a href="/activities" class="btn-primary">Edit my activities</a>
         {% if member.is_admin %}
           <a href="/admin/report" class="btn-primary">Council Report</a>
+          <a href="/admin/email-template" class="btn-primary">Edit Email Template</a>
         {% endif %}
         <a href="/static/fraternal_survey1728_p.pdf" class="btn-primary" target="_blank">KofC 1728 PDF Form</a>
       </div>

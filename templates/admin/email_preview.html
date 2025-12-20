@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Email Preview</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h2>Email Preview</h2>
+      <div class="top-links">
+        <a href="/admin/email-template" class="btn-primary">Back to Editor</a>
+        <a href="/admin/report" class="btn-primary">Admin Report</a>
+      </div>
+    </div>
+    <div>
+      Logged in as {{ member.first_name }} {{ member.last_name }}
+      <form method="post" action="/logout" style="display:inline">
+        <button type="submit">Logout</button>
+      </form>
+    </div>
+  </div>
+
+  <h3>Preview for {{ preview_for.first_name }} {{ preview_for.last_name }} (Member #{{ preview_for.member_number }})</h3>
+  <div class="card">
+    <pre style="white-space:pre-wrap;">{{ rendered }}</pre>
+  </div>
+
+  <h4>Raw template</h4>
+  <div class="card">
+    <pre style="white-space:pre-wrap;">{{ raw }}</pre>
+  </div>
+
+</body>
+</html>
+

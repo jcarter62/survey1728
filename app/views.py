@@ -651,3 +651,92 @@ async def api_activity_update(request: Request, db: Session = Depends(get_db)):
     saved_at = datetime.now(timezone.utc).isoformat()
 
     return JSONResponse({"status": "ok", "saved_at": saved_at})
+
+@router.get('/admin/email-template', response_class=HTMLResponse)
+async def admin_email_template_get(request: Request, db: Session = Depends(get_db)):
+    member = get_current_member(request, db)
+    require_admin(member)
+
+    email_template_file_path = os.getenv('EMAIL_TEXT', EMAIL_TEXT)
+    email_template_file_path = os.path.expanduser(os.path.expandvars(email_template_file_path))
+    if not os.path.isabs(email_template_file_path):
+        email_template_file_path = os.path.abspath(email_template_file_path)
+
+    content = ''
+    if os.path.exists(email_template_file_path):
+        try:
+            with open(email_template_file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+        except Exception as e:
+            return templates.TemplateResponse('admin/email_editor.html', { 'request': request, 'member': member, 'file_path': email_template_file_path, 'content': '', 'error': f'Failed to read file: {e}', 'members': [] }, status_code=500)
+    else:
+        # file doesn't exist yet - we'll start with empty content
+        content = ''
+
+    # provide members list for preview selection
+    members = db.query(Member).order_by(Member.last_name, Member.first_name).all()
+
+    return templates.TemplateResponse('admin/email_editor.html', { 'request': request, 'member': member, 'file_path': email_template_file_path, 'content': content, 'error': None, 'success': None, 'members': members })
+
+@router.post('/admin/email-template', response_class=HTMLResponse)
+async def admin_email_template_post(request: Request, db: Session = Depends(get_db)):
+    member = get_current_member(request, db)
+    require_admin(member)
+
+    form = await request.form()
+    content = form.get('content', '')
+
+    email_template_file_path = os.getenv('EMAIL_TEXT', EMAIL_TEXT)
+    email_template_file_path = os.path.expanduser(os.path.expandvars(email_template_file_path))
+    if not os.path.isabs(email_template_file_path):
+        email_template_file_path = os.path.abspath(email_template_file_path)
+
+    # Ensure directory exists
+    dirpath = os.path.dirname(email_template_file_path)
+    try:
+        os.makedirs(dirpath, exist_ok=True)
+    except Exception as e:
+        members = db.query(Member).order_by(Member.last_name, Member.first_name).all()
+        return templates.TemplateResponse('admin/email_editor.html', { 'request': request, 'member': member, 'file_path': email_template_file_path, 'content': content, 'error': f'Failed to ensure directory: {e}', 'success': None, 'members': members }, status_code=500)
+
+    try:
+        with open(email_template_file_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+    except Exception as e:
+        members = db.query(Member).order_by(Member.last_name, Member.first_name).all()
+        return templates.TemplateResponse('admin/email_editor.html', { 'request': request, 'member': member, 'file_path': email_template_file_path, 'content': content, 'error': f'Failed to write file: {e}', 'success': None, 'members': members }, status_code=500)
+
+    members = db.query(Member).order_by(Member.last_name, Member.first_name).all()
+    return templates.TemplateResponse('admin/email_editor.html', { 'request': request, 'member': member, 'file_path': email_template_file_path, 'content': content, 'error': None, 'success': 'Template saved.', 'members': members })
+
+@router.post('/admin/email-preview', response_class=HTMLResponse)
+async def admin_email_preview(request: Request, db: Session = Depends(get_db)):
+    member = get_current_member(request, db)
+    require_admin(member)
+
+    form = await request.form()
+    content = form.get('content', '')
+    preview_member_number = form.get('preview_member') or ''
+
+    # choose a member to preview with; fall back to current admin if not provided
+    target_member = None
+    if preview_member_number:
+        target_member = db.query(Member).filter(Member.member_number == preview_member_number).first()
+    if not target_member:
+        target_member = member
+
+    # prepare replacement map
+    mp = {
+        '{name}': f"{target_member.first_name or ''} {target_member.last_name or ''}".strip(),
+        '{last_name}': target_member.last_name or '',
+        '{url}': os.getenv('URL', 'http://localhost:8000'),
+        '{access_code}': getattr(target_member, 'access_code', '') or '[no access code]',
+    }
+
+    rendered = content
+    for k, v in mp.items():
+        rendered = rendered.replace(k, v)
+
+    # Return a simple preview page
+    return templates.TemplateResponse('admin/email_preview.html', { 'request': request, 'member': member, 'preview_for': target_member, 'rendered': rendered, 'raw': content })
+

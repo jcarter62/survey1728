@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Edit Email Template</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div>
+      <h2>Edit Email Notification Template</h2>
+      <div class="top-links">
+        <a href="/admin/report" class="btn-primary">Admin Report</a>
+        <a href="/dashboard" class="btn-primary">My Dashboard</a>
+      </div>
+    </div>
+    <div>
+      Logged in as {{ member.first_name }} {{ member.last_name }}
+      <form method="post" action="/logout" style="display:inline">
+        <button type="submit">Logout</button>
+      </form>
+    </div>
+  </div>
+
+  <p>Editing file: <code>{{ file_path }}</code></p>
+
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  {% if success %}<div class="success">{{ success }}</div>{% endif %}
+
+  <form id="saveForm" method="post" action="/admin/email-template">
+    <label for="content">Template content</label>
+    <textarea id="content" name="content" rows="20" aria-label="email template content" style="width:100%; box-sizing:border-box; font-family:monospace;">{{ content }}</textarea>
+
+    <div style="margin-top:0.5rem; display:flex; gap:0.5rem; align-items:center;">
+      <button type="submit" class="btn-save">Save Template</button>
+
+      <!-- Preview controls -->
+      <label for="preview_member" style="margin-left:1rem;">Preview as</label>
+      <select id="preview_member" name="preview_member">
+        <option value="">(Current admin)</option>
+        {% for m in members %}
+          <option value="{{ m.member_number }}">{{ m.first_name }} {{ m.last_name }} — {{ m.member_number }}</option>
+        {% endfor %}
+      </select>
+
+      <button type="button" id="btnPreview" class="btn-primary">Preview</button>
+
+    </div>
+
+    <div style="margin-top:0.5rem; display:flex; gap:0.5rem; align-items:center;">
+        Valid placeholder variables:
+        <ul>
+        <li><code>{{ '{name}' }}</code></li>
+        <li><code>{{ '{last_name}' }}</code></li>
+        <li><code>{{ '{url}' }}</code></li>
+        <li><code>{{ '{access_code}' }}</code></li>
+        </ul>
+    </div>
+  </form>
+
+  <!-- Hidden form used to POST preview data into a new tab -->
+  <form id="previewForm" method="post" action="/admin/email-preview" target="_blank" style="display:none">
+    <input type="hidden" name="content" id="previewContent" />
+    <input type="hidden" name="preview_member" id="previewMemberVal" />
+  </form>
+
+<script>
+  document.getElementById('btnPreview').addEventListener('click', function() {
+    const content = document.getElementById('content').value || '';
+    const sel = document.getElementById('preview_member');
+    const memberVal = sel ? sel.value : '';
+
+    const previewContent = document.getElementById('previewContent');
+    const previewMemberVal = document.getElementById('previewMemberVal');
+    previewContent.value = content;
+    previewMemberVal.value = memberVal;
+
+    // Submit the hidden form which opens in a new tab
+    document.getElementById('previewForm').submit();
+  });
+</script>
+
+</body>
+</html>
+
