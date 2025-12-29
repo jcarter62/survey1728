@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.templating import Jinja2Templates
@@ -18,16 +18,9 @@ app = FastAPI()
 setup_logging()
 logger = logging.getLogger(__name__)
 
-# Middleware
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+@app.on_event("startup")
+async def on_startup():
+    setup_logging()
 
 # Middleware to extract client IP (honoring common Cloudflare headers) and member name
 @app.middleware("http")
@@ -95,6 +88,17 @@ async def add_request_context(request: Request, call_next):
 
     return response
 
+# Middleware
+# Added after add_request_context so they wrap it (run first)
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 templates = Jinja2Templates(directory="templates")
 
@@ -122,6 +126,10 @@ except Exception as e:
     print("DB init error:", e)
 
 app.include_router(api)
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse("static/favicon.png")
 
 @app.get("/", response_class=HTMLResponse)
 async def home_get(request: Request):

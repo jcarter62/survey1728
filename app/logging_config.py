@@ -7,58 +7,59 @@ request_member_name: contextvars.ContextVar[str] = contextvars.ContextVar("reque
 request_member_id: contextvars.ContextVar[str] = contextvars.ContextVar("request_member_id", default="-")
 
 
-class RequestContextFilter(logging.Filter):
-    """Logging filter that injects request-scoped fields into LogRecord.
-
-    Ensure this filter is attached to loggers/handlers so formatters can
-    use %(client_ip)s, %(member_id)s and %(member_name)s in log formats.
-    """
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        # Provide default values if not set in context
-        try:
+class RequestContextFormatter(logging.Formatter):
+    """Formatter that injects request-scoped fields into LogRecord if missing."""
+    
+    def format(self, record: logging.LogRecord) -> str:
+        # Ensure fields exist in the record before formatting
+        if not hasattr(record, "client_ip"):
             record.client_ip = request_client_ip.get()
-        except LookupError:
-            record.client_ip = "-"
-        try:
+        if not hasattr(record, "member_name"):
             record.member_name = request_member_name.get()
-        except LookupError:
-            record.member_name = "-"
-        try:
+        if not hasattr(record, "member_id"):
             record.member_id = request_member_id.get()
-        except LookupError:
-            record.member_id = "-"
-        return True
+        return super().format(record)
 
 
 def setup_logging(level: int = logging.INFO) -> None:
     """Configure root and uvicorn loggers to include request context fields.
 
-    This config is intentionally minimal: we add the RequestContextFilter to
-    the root logger and uvicorn loggers so `%(client_ip)s`, `%(member_id)s` and
-    `%(member_name)s` are available to formatters. We don't override uvicorn's
-    handlers deeply to avoid clobbering their behavior.
+    We use a custom Formatter to inject the context fields (client_ip, member_id, member_name)
+    into the LogRecord if they are missing. This avoids KeyErrors when using these fields
+    in the format string.
     """
     fmt = "%(asctime)s %(levelname)s [%(client_ip)s] [member:%(member_id)s %(member_name)s] %(name)s: %(message)s"
-    handler = logging.StreamHandler()
-    handler.setFormatter(logging.Formatter(fmt))
-    handler.addFilter(RequestContextFilter())
-
+    formatter = RequestContextFormatter(fmt)
+    
     root = logging.getLogger()
-    # Avoid adding duplicate handlers if setup_logging called multiple times
-    if not any(isinstance(h, logging.StreamHandler) for h in root.handlers):
+    
+    # If root has handlers (e.g. from uvicorn/gunicorn config), patch them.
+    # Otherwise add a default StreamHandler.
+    if root.handlers:
+        for h in root.handlers:
+            h.setFormatter(formatter)
+    else:
+        handler = logging.StreamHandler()
+        handler.setFormatter(formatter)
         root.addHandler(handler)
+
     root.setLevel(level)
-    # Ensure uvicorn loggers also get the filter so their records have the fields
-    for lname in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+    
+    # Ensure uvicorn/gunicorn loggers also get the formatter
+    for lname in ("uvicorn", "uvicorn.error", "uvicorn.access", "gunicorn.error", "gunicorn.access"):
         log = logging.getLogger(lname)
-        log.addFilter(RequestContextFilter())
+        for h in log.handlers:
+            h.setFormatter(formatter)
+
+    # Suppress uvicorn.access logs to avoid duplicates/empty context logs
+    # The application middleware handles access logging with full context.
+    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 
 __all__ = [
     "request_client_ip",
     "request_member_name",
     "request_member_id",
-    "RequestContextFilter",
+    "RequestContextFormatter",
     "setup_logging",
 ]
