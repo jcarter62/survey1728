@@ -1,5 +1,6 @@
 import logging
 import contextvars
+import sys
 
 # Context variables populated per-request by middleware
 request_client_ip: contextvars.ContextVar[str] = contextvars.ContextVar("request_client_ip", default="-")
@@ -22,38 +23,45 @@ class RequestContextFormatter(logging.Formatter):
 
 
 def setup_logging(level: int = logging.INFO) -> None:
-    """Configure root and uvicorn loggers to include request context fields.
+    """Configure logging to include request context and output to stdout.
 
-    We use a custom Formatter to inject the context fields (client_ip, member_id, member_name)
-    into the LogRecord if they are missing. This avoids KeyErrors when using these fields
-    in the format string.
+    This setup:
+    1. Configures the root logger to write to sys.stdout using our custom formatter.
+    2. Aggressively silences 'uvicorn.access' to avoid duplicate/standard access logs.
+    3. Configures 'uvicorn.error' and others to use our formatter and handler.
     """
     fmt = "%(asctime)s %(levelname)s [%(client_ip)s] [member:%(member_id)s %(member_name)s] %(name)s: %(message)s"
     formatter = RequestContextFormatter(fmt)
     
+    # Create a handler that writes to stdout
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(formatter)
+
+    # Configure root logger
     root = logging.getLogger()
-    
-    # If root has handlers (e.g. from uvicorn/gunicorn config), patch them.
-    # Otherwise add a default StreamHandler.
-    if root.handlers:
-        for h in root.handlers:
-            h.setFormatter(formatter)
-    else:
-        handler = logging.StreamHandler()
-        handler.setFormatter(formatter)
-        root.addHandler(handler)
-
     root.setLevel(level)
-    
-    # Ensure uvicorn/gunicorn loggers also get the formatter
-    for lname in ("uvicorn", "uvicorn.error", "uvicorn.access", "gunicorn.error", "gunicorn.access"):
-        log = logging.getLogger(lname)
-        for h in log.handlers:
-            h.setFormatter(formatter)
+    # Remove existing handlers and add ours
+    if root.handlers:
+        for h in list(root.handlers):
+            root.removeHandler(h)
+    root.addHandler(handler)
 
-    # Suppress uvicorn.access logs to avoid duplicates/empty context logs
-    # The application middleware handles access logging with full context.
-    logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+    # Silence uvicorn.access logger
+    # We handle access logging in the application middleware with full context.
+    uvicorn_access = logging.getLogger("uvicorn.access")
+    uvicorn_access.handlers = []
+    uvicorn_access.propagate = False
+    uvicorn_access.setLevel(logging.CRITICAL)
+    uvicorn_access.disabled = True
+
+    # Configure other uvicorn/gunicorn loggers to use our handler
+    # This ensures they use the correct format and output stream
+    for lname in ("uvicorn", "uvicorn.error", "gunicorn.error"):
+        log = logging.getLogger(lname)
+        log.handlers = []
+        log.propagate = False # Do not propagate to root (we handle it here)
+        log.addHandler(handler)
+        log.setLevel(level)
 
 
 __all__ = [
